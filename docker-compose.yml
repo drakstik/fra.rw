@@ -1,0 +1,56 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    env_file: ./.env
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    # no `ports:` — not reachable from the host, only from other containers
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: backend
+    restart: unless-stopped
+    env_file: ./.env
+    environment:
+      NODE_ENV: development
+      DB_HOST: postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - internal
+    # no `ports:` — only nginx talks to this, over the internal network
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "8080:8080"
+    networks:
+      - internal
+
+networks:
+  internal:
+    driver: bridge
+
+volumes:
+  pgdata:
