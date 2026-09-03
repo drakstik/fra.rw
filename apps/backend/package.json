@@ -3,10 +3,12 @@
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "ts-node-dev --respawn src/index.ts",
+    "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",
     "typeorm": "typeorm-ts-node-esm -d src/config/data-source.ts"
   },
@@ -26,7 +28,8 @@
     "@types/cookie-parser": "^1.4.10",
     "@types/express": "^5.0.6",
     "@types/node": "^24.13.3",
-    "ts-node-dev": "^2.0.0",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.23.13",
     "typescript": "~6.0.3"
   }
 }
