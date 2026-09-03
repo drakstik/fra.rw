@@ -11,6 +11,21 @@ RUN pnpm --filter frontend build
 RUN pnpm --filter backend deploy --prod --legacy /prod/backend
 RUN pnpm --filter frontend deploy --prod --legacy /prod/frontend
 
+# Dev Containers / local development only — never used for the deployed
+# image. Same install as `build` above (full workspace, so backend's
+# devDependencies like ts-node-dev are present) but skips the
+# build/deploy steps and runs the TS source directly with hot reload.
+# The devcontainer bind-mounts the repo over this at runtime; this layer
+# just needs to exist so `pnpm install` has already happened in the image.
+FROM base AS backend-dev
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json .npmrc ./
+COPY apps ./apps
+RUN pnpm install --frozen-lockfile
+RUN chown -R node:node /app
+USER node
+EXPOSE 3000
+CMD ["pnpm", "--filter", "backend", "dev"]
+
 FROM base AS backend
 COPY --from=build /prod/backend ./
 USER node

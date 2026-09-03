@@ -8,7 +8,7 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "ts-node-dev --respawn src/index.ts",
     "build": "tsc -p tsconfig.json",
-    "typeorm": "typeorm-ts-node-commonjs -d src/config/data-source.ts"
+    "typeorm": "typeorm-ts-node-esm -d src/config/data-source.ts"
   },
   "keywords": [],
   "author": "",

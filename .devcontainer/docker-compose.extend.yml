@@ -1,0 +1,23 @@
+services:
+  backend:
+    build:
+      target: backend-dev
+    # ts-node-dev watches and restarts on change — no manual pnpm command
+    # needed once the container's running.
+    command: ["pnpm", "--filter", "backend", "dev"]
+    volumes:
+      # Live source from the host, so edits in VS Code are picked up
+      # immediately by ts-node-dev inside the container.
+      - .:/app:cached
+      # Named volumes at each node_modules path so the bind mount above
+      # doesn't shadow the packages `pnpm install` already put there in
+      # the image. Without these, the (likely empty, or host-OS-built)
+      # node_modules on your machine would overwrite the container's.
+      - backend_root_node_modules:/app/node_modules
+      - backend_app_node_modules:/app/apps/backend/node_modules
+      - backend_frontend_node_modules:/app/apps/frontend/node_modules
+
+volumes:
+  backend_root_node_modules:
+  backend_app_node_modules:
+  backend_frontend_node_modules:

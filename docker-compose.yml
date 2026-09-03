@@ -10,13 +10,13 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
     networks:
-      - internal
+      - db # separate db network for the backend only
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
       interval: 5s
       timeout: 5s
       retries: 10
-    # no `ports:` — not reachable from the host, only from other containers
+    # Security: no `ports:` — not reachable from the host, only from other containers
 
   backend:
     build:
@@ -32,8 +32,9 @@ services:
       postgres:
         condition: service_healthy
     networks:
-      - internal
-    # no `ports:` — only nginx talks to this, over the internal network
+      - db
+      - public
+    # Security: no `ports:` — only nginx talks to this, over the internal network
 
   frontend:
     build:
@@ -46,10 +47,12 @@ services:
     ports:
       - "8080:8080"
     networks:
-      - internal
+      - public # Only public network, no access to db network
 
 networks:
-  internal:
+  db: # Only for backend to speak to postgres
+    driver: bridge
+  public: # Only for the frontend to speak to clients and backend, but not to postgres
     driver: bridge
 
 volumes:

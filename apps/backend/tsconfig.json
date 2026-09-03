@@ -9,16 +9,20 @@
     // See also https://aka.ms/tsconfig/module
     "module": "nodenext",
     "target": "esnext",
-    "types": [],
-    // For nodejs:
-    // "lib": ["esnext"],
-    // "types": ["node"],
-    // and npm install -D @types/node
+    "types": ["node"],
 
     // Other Outputs
     "sourceMap": true,
     "declaration": true,
     "declarationMap": true,
+
+    // Decorators
+    // TypeORM's decorators (@Entity, @Column, ...) are written against the
+    // legacy/experimental decorator + reflect-metadata proposal, not TS's
+    // newer Stage-3 default decorators. Both flags are required together
+    // for TypeORM to work at all under this TS version.
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
 
     // Stricter Typechecking Options
     "noUncheckedIndexedAccess": true,
