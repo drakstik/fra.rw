@@ -2,18 +2,9 @@ import "reflect-metadata";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { DataSource } from "typeorm";
+import { requireEnv } from "../lib/env.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
-
-// Check that .env exists and returns the value, given a name key
-function requireEnv(name: string): string {
-  const value = process.env[name];
-  if (!value) {
-    throw new Error(`Missing required environment variable: ${name}`);
-  }
-  return value;
-}
 
 // Set NODE_ENV=production and the code for .js or .ts extension.
 const isProduction = process.env.NODE_ENV === "production";

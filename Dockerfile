@@ -18,6 +18,11 @@ RUN pnpm --filter frontend deploy --prod --legacy /prod/frontend
 # The devcontainer bind-mounts the repo over this at runtime; this layer
 # just needs to exist so `pnpm install` has already happened in the image.
 FROM base AS backend-dev
+# curl is dev-convenience only — for hitting the API by hand while
+# testing. Deliberately scoped to this stage alone: `backend` (the
+# production target below) builds `FROM base` independently and never
+# sees this layer, so the deployed image stays minimal.
+RUN apk add --no-cache curl
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json .npmrc ./
 COPY apps ./apps
 RUN pnpm install --frozen-lockfile
