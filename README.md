@@ -23,6 +23,6 @@ Customers are not greeted with an obvious login button. To maintain a persistent
 There are 2 ways we collect customer's identifiers (email/phone),
 
 1. Email & Phone number for marketing content. This does NOT create an customer account. The entry point for this will be at the bottom of every page.
-2. Email & Phone number for order history and delivery tracking. This does create a customer account. The entry point for this will be right before payment and basket info + JWT will transfer to an logged in customer account's JWT.
+2. Email & Phone number for order history and delivery tracking. This does create a customer account. The entry point for this will be right before payment and basket info (as a modal over the final basket viewing/payment-button page, so it's smooth, instead of being its own page. Next page would be payment portal of IremboPay or PesaPay) + JWT will transfer to an logged in customer account's JWT.
 
 Admins and Operators are invited by the initial Admin with an invitation link sent to their email, where they must then create login credentials.
