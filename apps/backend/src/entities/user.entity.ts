@@ -49,11 +49,20 @@ import { UserRole } from "./enums/user-role.enum.js";
 export abstract class User {
   @PrimaryGeneratedColumn("uuid")
   id!: string;
-  /**
-   * STI discriminator column, populated automatically by TypeORM from the
-   * `@ChildEntity(...)` value of whichever subclass is saved. Declared
-   * (undecorated) here purely so TypeScript knows the property exists.
+   /**
+   * STI discriminator column. `@TableInheritance` above already tells
+   * TypeORM which DB column ("role") and type back this discriminator —
+   * this @Column mapping is what makes that same value actually hydrate
+   * onto this property when an entity is loaded, rather than staying
+   * internal to TypeORM's own subclass-selection logic.
+   *
+   * insert: false / update: false (the current replacement for the
+   * removed `readonly` column option, per TypeORM 1.0's migration guide)
+   * — the value is written by TypeORM's own STI mechanism based on which
+   * `@ChildEntity(...)` subclass is being saved, not by application code
+   * setting this property directly.
    */
+  @Column({ type: "varchar", name: "role", update: false })
   readonly role!: UserRole;
 
   /**
