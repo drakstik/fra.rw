@@ -25,10 +25,8 @@ export const Errors = {
     new AppError(423, "ACCOUNT_LOCKED", "Account temporarily locked due to repeated failed logins. Please wait a bit before trying again."),
   accountInactive: () =>
     new AppError(403, "ACCOUNT_INACTIVE", "This account is inactive."),
-  emailTaken: () =>
-    new AppError(409, "EMAIL_TAKEN", "An account with this email already exists."),
-  phoneTaken: () =>
-    new AppError(409, "PHONE_TAKEN", "An account with this phone number already exists."),
+  accountExists: () =>
+    new AppError(409, "ACOUNT_EXISTS", "An account with this email or phone number already exists. Try logging in, or using a different email and phone number."),
   unauthenticated: () =>
     new AppError(401, "UNAUTHENTICATED", "Authentication required."),
   invalidRefreshToken: () =>
