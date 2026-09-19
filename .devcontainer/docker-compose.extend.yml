@@ -2,6 +2,7 @@ services:
   backend:
     build:
       target: backend-dev
+    env_file: ./.env
     # ts-node-dev watches and restarts on change — no manual pnpm command
     # needed once the container's running.
     command: ["pnpm", "--filter", "backend", "dev"]

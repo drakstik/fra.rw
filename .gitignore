@@ -4,4 +4,8 @@ dist/
 *.log
 .pnpm-store
 *.dump
+<<<<<<< HEAD
 docker-compose.override.yml
+=======
+*.override.yml
+>>>>>>> c623dd91fa1be64c56912e93d5522123636056ed
