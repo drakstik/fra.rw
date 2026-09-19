@@ -1,5 +1,8 @@
 packages:
   - "apps/*"
   - "packages/*"
+storeDir: /app/.pnpm-store
+injectWorkspacePackages: true
 allowBuilds:
+  '@scarf/scarf': false
   esbuild: true

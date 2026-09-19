@@ -2,9 +2,11 @@ import "reflect-metadata";
 import express from "express";
 import cookieParser from "cookie-parser";
 import helmet from "helmet";
+import swaggerUi from "swagger-ui-express";
 import { AppDataSource } from "./config/data-source.js";
 import { authRouter } from "./routes/auth.routes.js";
 import { errorHandler } from "./middleware/error-handler.js";
+import { openApiSpec } from "./docs/openapi.js";
 
 const app = express();
 
@@ -14,6 +16,17 @@ const app = express();
 // of the nginx container's IP. `1` = trust exactly one proxy hop; do not
 // widen this without also reconsidering the rate limiter's IP trust.
 app.set("trust proxy", 1);
+
+// Swagger UI (dev-only, for end-to-end testing through the browser — see
+// CLAUDE.md). Mounted BEFORE helmet() so its default HTML page's inline
+// bootstrap script isn't blocked by helmet's script-src 'self' CSP; since
+// this whole block is skipped in production, that relaxed policy never
+// reaches a deployed environment. Access via nginx at /api/docs — hitting
+// it directly on :3000 works too, but see openapi.ts's server list for
+// why that server won't exercise the refresh-cookie path correctly.
+if (process.env.NODE_ENV !== "production") {
+  app.use("/docs", swaggerUi.serve, swaggerUi.setup(openApiSpec));
+}
 
 // Helmet headers here are defense-in-depth for the API itself — nginx
 // already sets the frontend's security headers, but /api/ responses

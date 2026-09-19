@@ -4,6 +4,7 @@ import {
   ACCESS_TOKEN_COOKIE,
   ACCESS_TOKEN_TTL_SECONDS,
   REFRESH_TOKEN_COOKIE,
+  REFRESH_TOKEN_COOKIE_PATH,
   REFRESH_TOKEN_TTL_DAYS,
   baseCookieOptions,
 } from "../config/auth.config.js";

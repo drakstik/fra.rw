@@ -26,7 +26,7 @@ export const Errors = {
   accountInactive: () =>
     new AppError(403, "ACCOUNT_INACTIVE", "This account is inactive."),
   accountExists: () =>
-    new AppError(409, "ACOUNT_EXISTS", "An account with this email or phone number already exists. Try logging in, or using a different email and phone number."),
+    new AppError(409, "ACCOUNT_EXISTS", "An account with this email or phone number already exists. Try logging in, or using a different email and phone number."),
   unauthenticated: () =>
     new AppError(401, "UNAUTHENTICATED", "Authentication required."),
   invalidRefreshToken: () =>
