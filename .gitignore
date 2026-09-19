@@ -3,3 +3,5 @@ dist/
 .env
 *.log
 .pnpm-store
+*.dump
+docker-compose.override.yml
