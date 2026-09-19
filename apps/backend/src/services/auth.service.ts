@@ -113,10 +113,12 @@ export async function signUpCustomer(input: SignUpInput, meta: RequestMeta) {
   // Pre-check for a friendlier error than a raw unique-constraint violation.
   // The DB's partial unique indexes (WHERE deleted_at IS NULL) remain the
   // actual source of truth/race-condition backstop — this is just UX.
-  const existingEmail = await userRepo().findOne({ where: { email: input.email } });
-  if (existingEmail) throw Errors.emailTaken();
-  const existingPhone = await userRepo().findOne({ where: { phoneNumber: input.phoneNumber } });
-  if (existingPhone) throw Errors.phoneTaken();
+  const existingUser = await userRepo()
+    .createQueryBuilder("user")
+    .where("user.email = :email", { email: input.email })
+    .orWhere("user.phoneNumber = :phoneNumber", { phoneNumber: input.phoneNumber })
+    .getOne();
+  if (existingUser) throw Errors.accountExists();
 
   const passwordHash = await argon2Hash(input.password, { algorithm: ARGON2ID });
 
@@ -134,7 +136,7 @@ export async function signUpCustomer(input: SignUpInput, meta: RequestMeta) {
   } catch (err: unknown) {
     // Race condition backstop: two sign-ups for the same email landed
     // between the pre-check and the insert. Postgres unique_violation = 23505.
-    if (isUniqueViolation(err)) throw Errors.emailTaken();
+    if (isUniqueViolation(err)) throw Errors.accountExists();
     throw err;
   }
 

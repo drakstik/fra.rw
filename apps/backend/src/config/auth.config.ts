@@ -11,19 +11,41 @@ import { requireEnv } from "../lib/env.js";
 
 export const isProduction = process.env.NODE_ENV === "production";
 
-/**
- * HS256 signing secret for access tokens. Generate with e.g.
- * `openssl rand -base64 48`. Rotate by supporting a `JWT_ACCESS_SECRET_PREV`
- * fallback if you ever need zero-downtime rotation — not implemented yet,
- * intentionally: don't add rotation complexity before you need it.
- */
-export const JWT_ACCESS_SECRET = requireEnv("JWT_ACCESS_SECRET");
-
 export const ACCESS_TOKEN_TTL_SECONDS = 15 * 60; // 15 minutes
 export const REFRESH_TOKEN_TTL_DAYS = 30;
 
 export const ACCESS_TOKEN_COOKIE = "access_token";
 export const REFRESH_TOKEN_COOKIE = "refresh_token";
+/**
+ * HTTP Basic Auth for the /docs (Swagger UI) route — dev-only tooling,
+ * but still worth gating: it's a friendly, "Try it out"-enabled surface
+ * for the live API, and dev/staging boxes are sometimes reachable beyond
+ * just localhost. Deliberately NOT behind NODE_ENV like most secrets
+ * here — these are only required (and only read) inside index.ts's own
+ * `if (process.env.NODE_ENV !== "production")` guard, so production
+ * boots fine without them ever being set.
+ */
+export function docsAuthCredentials() {
+  return {
+    user: requireEnv("SWAGGER_DOCS_USER"),
+    password: requireEnv("SWAGGER_DOCS_PASSWORD"),
+  };
+}
+
+/**
+ * Path scope for the refresh-token cookie, in THIS SERVICE's own route
+ * space (matches index.ts's `app.use("/auth", authRouter)`).
+ *
+ * Deliberately NOT "/api/auth" — this app doesn't know or care that
+ * nginx happens to expose it under an /api/ prefix externally (see
+ * apps/frontend/nginx.conf). nginx already owns that prefix mapping for
+ * request paths via `proxy_pass`; it also owns the equivalent mapping
+ * for the outgoing Set-Cookie Path via `proxy_cookie_path /auth
+ * /api/auth;`. Keeping the proxy topology out of the app is why this is
+ * "/auth", not something env-configurable pointing at a specific
+ * deployment's external URL shape.
+ */
+export const REFRESH_TOKEN_COOKIE_PATH = "/auth";
 
 /**
  * Threshold for the brute-force lockout already modeled on the User

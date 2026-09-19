@@ -4,6 +4,7 @@ import {
   ACCESS_TOKEN_COOKIE,
   ACCESS_TOKEN_TTL_SECONDS,
   REFRESH_TOKEN_COOKIE,
+  REFRESH_TOKEN_COOKIE_PATH,
   REFRESH_TOKEN_TTL_DAYS,
   baseCookieOptions,
 } from "../config/auth.config.js";
@@ -45,18 +46,19 @@ function setSessionCookies(
   res.cookie(REFRESH_TOKEN_COOKIE, tokens.refreshToken, {
     ...base,
     maxAge: REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000,
-    // Refresh token is only needed by /auth/refresh and /auth/logout —
-    // scoping the cookie's path to /auth narrows where the browser sends
-    // it (never on e.g. /products or /articles requests) without being
-    // so narrow it misses the logout endpoint.
-    path: "/auth",
+    // Refresh token is only needed by /refresh and /logout — scoping the
+    // cookie's path narrows where the browser sends it (never on e.g.
+    // /products or /articles requests) without being so narrow it misses
+    // the logout endpoint. See REFRESH_TOKEN_COOKIE_PATH's doc comment
+    // for why this can't just hardcode the external nginx prefix.
+    path: REFRESH_TOKEN_COOKIE_PATH,
   });
 }
 
 function clearSessionCookies(res: Response) {
   const base = baseCookieOptions();
   res.clearCookie(ACCESS_TOKEN_COOKIE, base);
-  res.clearCookie(REFRESH_TOKEN_COOKIE, { ...base, path: "/auth" });
+  res.clearCookie(REFRESH_TOKEN_COOKIE, { ...base, path: REFRESH_TOKEN_COOKIE_PATH });
 }
 
 authRouter.post("/sign-up", signUpRateLimiter, validateBody(signUpSchema), async (req, res, next) => {
