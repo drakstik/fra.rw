@@ -16,6 +16,21 @@ export const REFRESH_TOKEN_TTL_DAYS = 30;
 
 export const ACCESS_TOKEN_COOKIE = "access_token";
 export const REFRESH_TOKEN_COOKIE = "refresh_token";
+/**
+ * HTTP Basic Auth for the /docs (Swagger UI) route — dev-only tooling,
+ * but still worth gating: it's a friendly, "Try it out"-enabled surface
+ * for the live API, and dev/staging boxes are sometimes reachable beyond
+ * just localhost. Deliberately NOT behind NODE_ENV like most secrets
+ * here — these are only required (and only read) inside index.ts's own
+ * `if (process.env.NODE_ENV !== "production")` guard, so production
+ * boots fine without them ever being set.
+ */
+export function docsAuthCredentials() {
+  return {
+    user: requireEnv("SWAGGER_DOCS_USER"),
+    password: requireEnv("SWAGGER_DOCS_PASSWORD"),
+  };
+}
 
 /**
  * Path scope for the refresh-token cookie, in THIS SERVICE's own route

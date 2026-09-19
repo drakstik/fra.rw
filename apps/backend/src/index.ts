@@ -3,10 +3,12 @@ import express from "express";
 import cookieParser from "cookie-parser";
 import helmet from "helmet";
 import swaggerUi from "swagger-ui-express";
+import basicAuth from "express-basic-auth";
 import { AppDataSource } from "./config/data-source.js";
 import { authRouter } from "./routes/auth.routes.js";
 import { errorHandler } from "./middleware/error-handler.js";
 import { openApiSpec } from "./docs/openapi.js";
+import { docsAuthCredentials } from "./config/auth.config.js";
 
 const app = express();
 
@@ -24,8 +26,21 @@ app.set("trust proxy", 1);
 // reaches a deployed environment. Access via nginx at /api/docs — hitting
 // it directly on :3000 works too, but see openapi.ts's server list for
 // why that server won't exercise the refresh-cookie path correctly.
+//
+// Gated behind Basic Auth (SWAGGER_DOCS_USER / SWAGGER_DOCS_PASSWORD) —
+// this is a "Try it out"-enabled live API surface, not just static docs,
+// and dev/staging boxes aren't always localhost-only. Not full 2FA:
+// disproportionate for an internal tool that's already invisible in
+// production; revisit if this ever gets deployed somewhere genuinely
+// internet-reachable rather than a private dev/staging network.
 if (process.env.NODE_ENV !== "production") {
-  app.use("/docs", swaggerUi.serve, swaggerUi.setup(openApiSpec));
+  const { user, password } = docsAuthCredentials();
+  app.use(
+    "/docs",
+    basicAuth({ users: { [user]: password }, challenge: true }),
+    swaggerUi.serve,
+    swaggerUi.setup(openApiSpec),
+  );
 }
 
 // Helmet headers here are defense-in-depth for the API itself — nginx

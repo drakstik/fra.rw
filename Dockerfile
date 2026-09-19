@@ -3,7 +3,7 @@ RUN corepack enable
 WORKDIR /app
 
 FROM base AS build
-COPY pnpm-lock.yaml pnpm-workspace.yaml package.json .npmrc ./
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY apps ./apps
 RUN pnpm install --frozen-lockfile
 RUN pnpm --filter backend build
@@ -23,7 +23,7 @@ FROM base AS backend-dev
 # production target below) builds `FROM base` independently and never
 # sees this layer, so the deployed image stays minimal.
 RUN apk add --no-cache curl
-COPY pnpm-lock.yaml pnpm-workspace.yaml package.json .npmrc ./
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY apps ./apps
 RUN pnpm install --frozen-lockfile
 RUN chown -R node:node /app

@@ -1,4 +1,4 @@
-{
+   {
   "name": "fra.rw backend",
   "dockerComposeFile": ["../docker-compose.yml", "docker-compose.extend.yml"],
   "service": "backend",
