@@ -296,7 +296,18 @@ export async function rotateRefreshToken(rawToken: string, meta: RequestMeta): P
       .andWhere("revoked_at IS NULL")
       .execute();
     if (claim.affected !== 1) return false; // lost the race: write nothing
-
+    
+    const newRefreshRow = manager.create(RefreshToken, {
+      userId: user.id,
+      tokenHash: refresh.hash,
+      familyId: tokenRow.familyId,
+      userAgent: meta.userAgent,
+      ipAddress: meta.ipAddress,
+      expiresAt: refreshExpiresAt,
+    });
+    
+    await manager.save(newRefreshRow);
+    
     // Strict revocation: kill every existing access session for this
     // family before minting the replacement, rather than letting the
     // superseded one linger until its own TTL expires. Trades a small
