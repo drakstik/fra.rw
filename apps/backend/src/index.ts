@@ -7,6 +7,7 @@ import basicAuth from "express-basic-auth";
 import { AppDataSource } from "./config/data-source.js";
 import { authRouter } from "./routes/auth.routes.js";
 import { errorHandler } from "./middleware/error-handler.js";
+import { requireTrustedOrigin } from "./middleware/origin-check.js";
 import { openApiSpec } from "./docs/openapi.js";
 import { docsAuthCredentials } from "./config/auth.config.js";
 
@@ -49,6 +50,12 @@ if (process.env.NODE_ENV !== "production") {
 app.use(helmet());
 app.use(express.json({ limit: "32kb" })); // small limit: this API has no file uploads yet
 app.use(cookieParser());
+// CSRF defense-in-depth on top of the session cookies' sameSite: "lax".
+// App-wide rather than /auth-only: it costs nothing on safe methods, and
+// future state-changing routes are covered by default instead of by
+// remembering to opt in. Before the routers, so blocked requests never
+// reach a handler or spend a rate-limit slot.
+app.use(requireTrustedOrigin);
 
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
 app.use("/auth", authRouter);
