@@ -6,6 +6,7 @@ import { RefreshToken } from "../entities/refresh-token.entity.js";
 import { generateOpaqueToken, hashToken, newFamilyId } from "../lib/tokens.js";
 import { AccessSession } from "../entities/access-session.entity.js";
 import { AppError, Errors } from "../lib/errors.js";
+import { logSecurityEvent } from "../lib/security-log.js";
 import { UserRole } from "../entities/enums/user-role.enum.js";
 import {
   ACCESS_TOKEN_TTL_SECONDS,
@@ -233,6 +234,41 @@ export async function rotateRefreshToken(rawToken: string, meta: RequestMeta): P
   if (!tokenRow) throw Errors.invalidRefreshToken();
 
   if (tokenRow.revokedAt || tokenRow.expiresAt < new Date()) { // if true then token may be stolen
+    // Log BEFORE revoking, so the event is recorded even if revocation
+    // itself throws. This is the strongest account-takeover signal in the
+    // codebase, so it gets a "warn" line an operator can grep for.
+    //
+    // Three cases, told apart by the row itself:
+    //  - "reused": the token was already ROTATED (has a successor). This
+    //    is the real theft signal -> "warn". One known benign cause: two
+    //    tabs refreshing at the same moment with the same cookie.
+    //  - "already_revoked": revoked WITHOUT a successor, i.e. killed by an
+    //    earlier family revocation or by logout. After a theft, the
+    //    victim's next refresh lands here; it's fallout, not a second
+    //    attack -> "info".
+    //  - "expired": the browser drops the cookie at the same TTL, so this
+    //    is usually clock skew or an old copy of the token -> "info".
+    const reason = tokenRow.revokedAt
+      ? tokenRow.replacedByTokenHash
+        ? "reused"
+        : "already_revoked"
+      : "expired";
+    logSecurityEvent(
+      "refresh_token_family_revoked",
+      {
+        reason,
+        userId: tokenRow.userId,
+        familyId: tokenRow.familyId,
+        // Who presented the dead token vs. who it was originally issued
+        // to: a mismatch here is what makes a reuse look like real theft.
+        presentedFromIp: meta.ipAddress,
+        presentedUserAgent: meta.userAgent,
+        issuedToIp: tokenRow.ipAddress,
+        issuedToUserAgent: tokenRow.userAgent,
+        tokenRevokedAt: tokenRow.revokedAt?.toISOString() ?? null,
+      },
+      reason === "reused" ? "warn" : "info",
+    );
     await revokeFamily(tokenRow.familyId); // Revoke entire family
     throw Errors.invalidRefreshToken(); // Return error to client
   }
@@ -246,20 +282,20 @@ export async function rotateRefreshToken(rawToken: string, meta: RequestMeta): P
   const access = generateOpaqueToken();
   const accessExpiresAt = new Date(Date.now() + ACCESS_TOKEN_TTL_SECONDS * 1000);
 
-  await AppDataSource.transaction(async (manager) => {
-    tokenRow.revokedAt = new Date();
-    tokenRow.replacedByTokenHash = refresh.hash;
-    await manager.save(tokenRow);
-
-    const newRefreshRow = manager.create(RefreshToken, {
-      userId: user.id,
-      tokenHash: refresh.hash,
-      familyId: tokenRow.familyId,
-      userAgent: meta.userAgent,
-      ipAddress: meta.ipAddress,
-      expiresAt: refreshExpiresAt,
-    });
-    await manager.save(newRefreshRow);
+  const claimed = await AppDataSource.transaction(async (manager) => {
+    // Atomic claim. The checks above ran on a snapshot, so N parallel
+    // requests with the same token can all pass them. This conditional
+    // UPDATE is the real gate: Postgres row-locks the token, so exactly
+    // one request sees `revoked_at IS NULL` and gets affected = 1; every
+    // other one waits for that commit, re-checks, and gets affected = 0.
+    const claim = await manager
+      .createQueryBuilder()
+      .update(RefreshToken)
+      .set({ revokedAt: new Date(), replacedByTokenHash: refresh.hash })
+      .where("id = :id", { id: tokenRow.id })
+      .andWhere("revoked_at IS NULL")
+      .execute();
+    if (claim.affected !== 1) return false; // lost the race: write nothing
 
     // Strict revocation: kill every existing access session for this
     // family before minting the replacement, rather than letting the
@@ -275,8 +311,28 @@ export async function rotateRefreshToken(rawToken: string, meta: RequestMeta): P
       familyId: tokenRow.familyId,
       expiresAt: accessExpiresAt,
     });
-    await manager.save(newAccessRow);
+        await manager.save(newAccessRow);
+    return true;
   });
+
+  if (!claimed) {
+    // Someone rotated this exact token between our read and our claim,
+    // i.e. the same token was presented twice at once. Same policy as a
+    // sequential replay: treat as theft and kill the whole family (which
+    // also kills the winner's fresh tokens). Known benign cause: two tabs
+    // refreshing at the same instant; they get logged out, not hijacked.
+    logSecurityEvent("refresh_token_family_revoked", {
+      reason: "reused_concurrently",
+      userId: tokenRow.userId,
+      familyId: tokenRow.familyId,
+      presentedFromIp: meta.ipAddress,
+      presentedUserAgent: meta.userAgent,
+      issuedToIp: tokenRow.ipAddress,
+      issuedToUserAgent: tokenRow.userAgent,
+    });
+    await revokeFamily(tokenRow.familyId);
+    throw Errors.invalidRefreshToken();
+  }
 
   return { accessToken: access.raw, refreshToken: refresh.raw, refreshTokenExpiresAt: refreshExpiresAt };
 }
