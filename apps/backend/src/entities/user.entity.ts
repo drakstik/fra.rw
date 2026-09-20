@@ -20,10 +20,7 @@ import { UserRole } from "./enums/user-role.enum.js";
  *    table + a single unique index. Three tables would need an extra
  *    cross-table check (e.g. a shared "identities" table) to get the same
  *    guarantee.
- *  - Auth code (login, JWT validation, "/me") operates on "a user" without
- *    caring about role most of the time; STI lets that code query one
- *    table and branch on `role` only where it actually matters.
- *
+ * 
  * This class is never instantiated directly — always use one of the child
  * entities (`CustomerUser` now; `AdminUser` / `OperatorUser` once the
  * invitation flow is built).
@@ -56,11 +53,13 @@ export abstract class User {
    * onto this property when an entity is loaded, rather than staying
    * internal to TypeORM's own subclass-selection logic.
    *
-   * insert: false / update: false (the current replacement for the
-   * removed `readonly` column option, per TypeORM 1.0's migration guide)
-   * — the value is written by TypeORM's own STI mechanism based on which
-   * `@ChildEntity(...)` subclass is being saved, not by application code
-   * setting this property directly.
+   * `update: false` (TypeORM 1.0's replacement for the removed `readonly`
+   * column option) makes the role immutable after creation.
+   *
+   * Deliberately NO `insert: false`: in TypeORM 1.x the STI mechanism does
+   * not populate this column on its own, so `signUpCustomer` sets `role`
+   * explicitly in its `.create({...})` call. Adding `insert: false` drops
+   * that value from the INSERT and fails with a NOT NULL violation.
    */
   @Column({ type: "varchar", name: "role", update: false })
   readonly role!: UserRole;
@@ -141,6 +140,10 @@ export abstract class User {
   })
   lastLoginAt!: Date | null;
 
+    /**
+   * NOT CURRENTLY WRITTEN. No password-change or reset flow exists yet;
+   * whichever flow sets this should also revoke the user's other sessions.
+   */
   @Column({
     name: "password_changed_at",
     type: "timestamptz",
