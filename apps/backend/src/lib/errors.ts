@@ -31,4 +31,6 @@ export const Errors = {
     new AppError(401, "UNAUTHENTICATED", "Authentication required."),
   invalidRefreshToken: () =>
     new AppError(401, "INVALID_REFRESH_TOKEN", "Session expired or invalid. Please log in again."),
+    crossOriginBlocked: () =>
+    new AppError(403, "CROSS_ORIGIN_BLOCKED", "Cross-site request blocked."),
 };

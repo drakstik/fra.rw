@@ -7,7 +7,7 @@
 # Replaying it also kills the victim's live refresh and access tokens immediately, not at TTL.
 
 # It checks that the DB agrees and that the step-2 security event was logged without the raw token. 
-# The final section is the grey-box race attack: 10 parallel refreshes with one token. This currently fails; see Findings.
+# The final section is the grey-box race attack: 10 parallel refreshes with one token.
 source "$(dirname "$0")/../lib.sh"
 principle "Refresh tokens are single-use; replaying a rotated token kills the whole session"
 
@@ -29,14 +29,23 @@ expect_eq "$(sql "SELECT (revoked_at IS NOT NULL) || ':' || (replaced_by_token_h
 me "$A0"; expect_status 401 "old access token A0 dies at rotation (strict revocation)"
 me "$A1"; expect_status 200 "new access token A1 works"
 
+# The rotated token must itself be usable: rotation has to STORE its
+# successor, or every session silently dies at the second refresh.
+expect_eq "$(sql "SELECT count(*) FROM refresh_tokens WHERE token_hash = '$(sha "$R1")' AND revoked_at IS NULL")" 1 \
+  "DB: successor R1 is stored and live"
+refresh "$R1"
+expect_status 200 "victim refreshes again (R1 -> R2): the chain continues"
+session_cookies; A2=$ACCESS; R2=$REFRESH
+me "$A2"; expect_status 200 "access token A2 works"
+
 # --- attack: replay the rotated token ---
 refresh "$R0"
 expect_status 401 "ATTACK: replaying rotated R0 is rejected"
 expect_code INVALID_REFRESH_TOKEN "rejection uses the generic INVALID_REFRESH_TOKEN code"
 check "rejection clears the refresh cookie" cookie_cleared refresh_token
 
-refresh "$R1"; expect_status 401 "fallout: victim's live R1 is revoked too (whole family)"
-me "$A1";      expect_status 401 "fallout: victim's live A1 dies immediately, not at TTL"
+refresh "$R2"; expect_status 401 "fallout: victim's live R2 is revoked too (whole family)"
+me "$A2";      expect_status 401 "fallout: victim's live A2 dies immediately, not at TTL"
 expect_eq "$(sql "SELECT count(*) FROM refresh_tokens WHERE family_id = '$FAMILY' AND revoked_at IS NULL")" 0 \
   "DB: no unrevoked refresh token left in the family"
 expect_eq "$(sql "SELECT count(*) FROM access_sessions WHERE family_id = '$FAMILY'")" 0 \
@@ -71,6 +80,7 @@ for round in 1 2; do
   WINNERS+="$OKS "
   (( LIVE > WORST_LIVE )) && WORST_LIVE=$LIVE
 done
-[[ "$WINNERS" == "1 1 " ]]; ok $? "ATTACK: 10 parallel refreshes with one token -> exactly one succeeds per round (got: ${WINNERS% })"[[ "$WORST_LIVE" -le 1 ]]; ok $? "DB: race leaves at most one live refresh token per family (worst: $WORST_LIVE)"
+[[ "$WINNERS" == "1 1 " ]]; ok $? "ATTACK: 10 parallel refreshes with one token -> exactly one succeeds per round (got: ${WINNERS% })"
+[[ "$WORST_LIVE" -le 1 ]]; ok $? "DB: race leaves at most one live refresh token per family (worst: $WORST_LIVE)"
 
 finish

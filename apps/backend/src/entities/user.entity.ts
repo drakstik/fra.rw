@@ -20,6 +20,9 @@ import { UserRole } from "./enums/user-role.enum.js";
  *    table + a single unique index. Three tables would need an extra
  *    cross-table check (e.g. a shared "identities" table) to get the same
  *    guarantee.
+ *  - Auth code (login, session validation, "/me") operates on "a user" without
+ *    caring about role most of the time; STI lets that code query one
+ *    table and branch on `role` only where it actually matters.
  * 
  * This class is never instantiated directly — always use one of the child
  * entities (`CustomerUser` now; `AdminUser` / `OperatorUser` once the
@@ -96,10 +99,12 @@ export abstract class User {
   passwordHash!: string;
 
   /**
-   * Bumped whenever all outstanding sessions for this user should be
-   * invalidated at once (password change, logout-everywhere, suspected
-   * compromise). The JWT's `tokenVersion` claim is checked against this
-   * column on every authenticated request.
+   * NOT CURRENTLY USED. Left over from the JWT design, where a
+   * `tokenVersion` claim would have been compared against this column.
+   * Sessions are now opaque DB rows (see AccessSession / RefreshToken), so
+   * nothing reads or increments this, and "log out everywhere" would be
+   * done by deleting/revoking that user's session rows, not by bumping a
+   * counter. Kept only to avoid a migration; safe to drop in a future one.
    */
   @Column({ name: "token_version", type: "int", default: 0 })
   tokenVersion!: number;

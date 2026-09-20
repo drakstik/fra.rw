@@ -48,6 +48,30 @@ export function docsAuthCredentials() {
 export const REFRESH_TOKEN_COOKIE_PATH = "/auth";
 
 /**
+ * Origins allowed to make state-changing requests (see
+ * middleware/origin-check.ts). Unlike REFRESH_TOKEN_COOKIE_PATH above,
+ * this genuinely IS deployment topology — the browser reports the
+ * external URL it loaded the app from, which only the deployment knows —
+ * so it comes from env rather than being hardcoded.
+ *
+ * Comma-separated, e.g. "https://fra.rw,https://www.fra.rw". Required in
+ * production (fail fast at boot); in dev it defaults to the nginx origin
+ * the app is actually served from, plus the Vite dev server for when the
+ * frontend starts. Parsed with `new URL(...).origin` so entries are
+ * normalized and a typo crashes at boot instead of silently blocking
+ * every request at runtime.
+ */
+const DEV_DEFAULT_ORIGINS = "http://localhost:8080,http://localhost:5173";
+
+export const ALLOWED_ORIGINS: ReadonlySet<string> = new Set(
+  (isProduction ? requireEnv("ALLOWED_ORIGINS") : process.env.ALLOWED_ORIGINS ?? DEV_DEFAULT_ORIGINS)
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .map((entry) => new URL(entry).origin),
+);
+
+/**
  * Threshold for the brute-force lockout already modeled on the User
  * entity (`failedLoginAttempts` / `lockedUntil`).
  */
