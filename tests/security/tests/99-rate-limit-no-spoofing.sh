@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # DESTRUCTIVE: exhausts this IP's login budget for 15 minutes. Run last.
+# Numbered 99 so it always sorts LAST -- anything after it would be blocked.
 source "$(dirname "$0")/../lib.sh"
 principle "Per-IP login rate limit holds, and can't be dodged by spoofing X-Forwarded-For"
 
