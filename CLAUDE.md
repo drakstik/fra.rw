@@ -22,7 +22,7 @@ As of `28f63c5`, `main` contains the sign-up/login/refresh implementation, Swagg
 
 ## This session: auth security test suite (`tests/security/`)
 
-Bash, black-box over HTTP **through nginx** (`localhost:8080/api` by default), grey-box via direct Postgres access for fixtures and for verifying what the server stored. 13 tests, one per adopted security principle, in priority order: opaque/hashed tokens, refresh rotation + theft + race, server-side logout, per-request session validation, password storage, lockout, login enumeration (incl. timing), sign-up enumeration, sign-up mass assignment, cookie hardening, input hardening, Swagger gating, rate limit vs. spoofed `X-Forwarded-For` (destructive, runs last).
+Bash, black-box over HTTP **through nginx** (`localhost:8080/api` by default), grey-box via direct Postgres access for fixtures and for verifying what the server stored. 14 tests, one per adopted security principle, in priority order: opaque/hashed tokens, refresh rotation + theft + race, server-side logout, per-request session validation, password storage, lockout, login enumeration (incl. timing), sign-up enumeration, sign-up mass assignment, cookie hardening, input hardening, Swagger gating, Origin/Referer CSRF check, and rate limit vs. spoofed `X-Forwarded-For`. The destructive rate-limit test is numbered **99** so it always sorts last — add new tests with numbers below it, and keep an eye on the login budget: a test that needs an *allowed* state-changing request should prefer `/auth/refresh` (60 per 15 min) over `/auth/login` (20).
 
 - **Run from the WSL terminal at the repo root, not inside the dev container** (needs nginx on `:8080` and `docker` for DB access). No `sudo` needed.
   `FRA_RESET_CMD='touch apps/backend/src/index.ts && sleep 6' tests/security/run-all.sh` — `--safe` skips the destructive test; `run-all.sh 02 06` runs a subset.
@@ -31,6 +31,8 @@ Bash, black-box over HTTP **through nginx** (`localhost:8080/api` by default), g
 - **Cleanup**: every test user is `sectest+…@fra.test`, hard-deleted on exit (sessions cascade); `run-all.sh` also sweeps leftovers. The suite should never leave rows behind — if it does, that's a bug.
 - **Harness safety**: a test that exits early without reaching `finish`, or runs zero checks, is reported as ERROR rather than PASS (both happened to be possible before; an empty test file used to pass silently).
 - **The tests were mutation-checked**, not just run green: deliberately breaking `trust proxy`, the lockout check, the dummy hash for unknown emails, the refresh claim, and nginx's `proxy_redirect` each turned the matching test red. Two vacuous checks were found and fixed this way — keep doing it when adding tests.
+- **Green is necessary, not sufficient.** After merging PR #4, `main` was found to never save the rotated refresh token (every session died at its second refresh), and test 02 had two checks merged onto one line (the second always passed) — both from hand-applying edits, and the suite was green throughout. Test 02 now refreshes twice in a row (R0 → R1 → R2) to catch the first; the second was only found by diffing pushed files against the tested ones. After applying edits by hand, run the verification greps given with the change, not just the suite.
+- **CSRF defense-in-depth (this session)**: `middleware/origin-check.ts` rejects state-changing requests (anything but GET/HEAD/OPTIONS) whose `Origin` — or `Referer`, as fallback — isn't in `ALLOWED_ORIGINS`, returning 403 `CROSS_ORIGIN_BLOCKED` and logging `cross_origin_request_blocked`. Exact origin match, so `http://localhost:8080.evil.com` and `https://localhost:8080` both fail. **Requests with neither header are allowed**: browsers always send `Origin` on cross-site POST, so those are non-browser callers (curl, health checks, future payment webhooks) and rejecting them would break them for nothing. Mounted app-wide before the routers, so blocked requests don't reach handlers or spend rate-limit budget. `ALLOWED_ORIGINS` is required in production and defaults to `http://localhost:8080,http://localhost:5173` in dev. Enforced by test 14; mutation-checked by unmounting it and by swapping the exact match for a substring match.
 - **Convention going forward: every new security-relevant behaviour gets a test here in the same change**, and a principle only counts as "adopted" once a test enforces it.
 
 ## This session: security fixes (each verified with the suite, before and after)
@@ -80,6 +82,11 @@ Root `package.json` didn't originally pin `packageManager`, so `corepack` silent
 - **`express-rate-limit`'s in-memory store only works single-instance.** Known gap if the project ever scales to multiple backend replicas — Redis would be the legitimate fit *there* (unlike for sessions).
 - **`trust proxy: 1`** in Express — trusts exactly one nginx hop for `X-Forwarded-For`. Don't widen without re-examining rate-limit key derivation.
 
+## Decisions taken, with expiry conditions
+
+- **Lockout response stays `423 ACCOUNT_LOCKED` (decided, interim).** A locked account answers 423 while an unknown email answers 401, so ~10 failed attempts confirm an email is registered. Accepted deliberately: the per-IP login limit (20 per 15 min) makes this roughly one probe per IP per window, and the alternative (a generic 401 while locked) would tell a legitimate locked user that their correct password is "invalid", with no way to explain why until transactional email exists. **Revisit when email is live** — see the email item in next steps. Tests 06/07 encode the current behaviour, so changing it means changing them.
+- **Account-lockout DoS is inherent and accepted.** Anyone who knows an address can lock it for 15 minutes. The window is the mitigation; an emailed unlock link would reduce it further, once email exists.
+
 ## Current implementation state
 
 ### Backend — live-verified through the real nginx path, and now enforced by `tests/security/` (all 13 passing)
@@ -116,14 +123,18 @@ Sign-up, login (right/wrong password), account lockout, refresh rotation, refres
 
 ## Suggested immediate next steps, in order
 
-1. **Small-medium**: Origin/Referer check as defense-in-depth on `/auth/*` POST routes, on top of `SameSite=Lax` — closes the residual CSRF gap for browsers that don't fully honor `SameSite`. Log rejections via `logSecurityEvent`, and add test `14-origin-check.sh` in the same change.
-2. **Decision needed (not code yet)**: a locked account answers `423 ACCOUNT_LOCKED` while an unknown email answers `401`, so 10 failed attempts confirm an email is registered — a partial undo of the login-enumeration protection. Common and often accepted trade-off; decide deliberately (keep, or return the generic 401 while locked) and update test 06/07 to match.
-3. **Small**: the hand-written `openapi.ts` has no drift check — at minimum, re-check it whenever an auth endpoint changes.
-4. **Only after the above**: start the frontend for real. Same file-by-file, typecheck-then-live-test rhythm. The frontend-dev-server networking gap (`vite dev` outside the container can't reach the backend on `localhost:3000`) still needs solving first — not yet designed.
-5. `/leads` marketing-capture endpoint.
-6. Guest-basket-JWT-to-account merge flow.
-7. TLS/nginx setup once ready to deploy past local dev — then run the suite with `FRA_EXPECT_SECURE=1`.
-8. CI that runs `tests/security/run-all.sh` against a disposable stack.
+1. **Small**: the hand-written `openapi.ts` has no drift check — at minimum, re-check it whenever an auth endpoint changes.
+2. **Only after the above**: start the frontend for real. Same file-by-file, typecheck-then-live-test rhythm. The frontend-dev-server networking gap (`vite dev` outside the container can't reach the backend on `localhost:3000`) still needs solving first — not yet designed. Note `ALLOWED_ORIGINS` already allows `http://localhost:5173` in dev for exactly this.
+3. `/leads` marketing-capture endpoint.
+4. Guest-basket-JWT-to-account merge flow.
+5. TLS/nginx setup once ready to deploy past local dev — then set `ALLOWED_ORIGINS` to the real https origins and run the suite with `FRA_EXPECT_SECURE=1`.
+6. CI that runs `tests/security/run-all.sh` against a disposable stack.
+7. **Transactional email, closer to deployment** (blocked on the Workspace/domain setup). Two auth changes come with it, in this order:
+   - **Close the lockout oracle**: return the generic 401 while locked (i.e. identical to a wrong password and to an unknown email), and send the account owner a "we locked your account for 15 minutes" email, logged via `logSecurityEvent`. That is what makes the generic response affordable — the owner learns what happened, a prober learns nothing. Update tests 06/07 and add a test that the locked response is byte-identical to the unknown-email one. Optionally include an unlock link to blunt the lockout DoS.
+   - **Close sign-up enumeration properly**: always answer "check your inbox" (identical response either way) and send one of two mails — "confirm your address" for a new address, or "someone tried to sign up with your address, here is a reset link" for an existing one. Replaces today's identical-409 approach with something equally safe and more useful; update test 08.
+   - **Email plumbing is its own security surface**: codes/links hashed at rest with short TTLs and single use (same pattern as refresh tokens), send limits per address AND per IP so the endpoint can't be used to bomb an inbox, never log codes, and identical response timing whether or not the address exists.
+   - **Sending**: Workspace is for humans, not app mail — Google scopes SMTP relay to printers/app-generated/low-volume business mail and explicitly not bulk, with the Gmail SMTP server capped around 2,000 messages/day and relay around 10,000 recipients/user/24h (lower on trial accounts). Use a transactional provider (Postmark, Resend, SES) authenticated on the same domain, so a bug in the app can never affect the real mailboxes. Verify current limits before relying on numbers.
+   - **Login OTP / 2FA is a separate question** — good against credential stuffing, but it does NOT fix enumeration and can create a new oracle ("we sent a code" vs "invalid credentials"). Don't conflate it with the above.
 
 ## Working-style notes for whoever picks this up
 
